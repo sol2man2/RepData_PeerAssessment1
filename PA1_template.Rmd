@@ -5,21 +5,109 @@ output:
     keep_md: true
 ---
 
+```{r,echo=FALSE}
+library(sqldf)
+library(ggplot2)
+```
 
 ## Loading and preprocessing the data
-
-
+```{r, echo=FALSE}
+origin <- read.csv(file="activity.csv")
+processed <- subset(origin, !is.na(steps))
+```
 
 ## What is mean total number of steps taken per day?
+```{r, echo=FALSE}
+daily_stemps <- sqldf('select date, sum(steps) as steps from processed group by date')
 
+# g <- ggplot(daily_stemps, aes(steps)) + geom_histogram()
 
+g <- ggplot(daily_stemps, aes(steps)) + geom_bar()
+plot(g)
+```
+
+Mean
+```{r,echo=FALSE}
+mean(daily_stemps$steps)
+```
+
+Median
+```{r,echo=FALSE}
+median(daily_stemps$steps)
+```
 
 ## What is the average daily activity pattern?
+```{r,echo=FALSE}
 
+minutely_stemps <- sqldf('select interval, avg(steps) as steps from processed group by interval')
 
+g <- ggplot(minutely_stemps, aes(x=interval, y=steps)) + geom_line(type="l")
+plot(g)
+```
 
+Max steps minute is
+```{r,echo=FALSE}
+which(minutely_stemps[,"steps"] == max(minutely_stemps$steps))
+```
+
+???
 ## Imputing missing values
+Total missing values is
+```{r,echo=FALSE}
+# nrow(origin)
+# nrow(processed)
+# nrow(origin)-nrow(processed)
 
+sum(is.na(origin$steps))
+```
 
+```{r,echo=FALSE}  
+mean_without_na <- function(daily_dt) {
+  without_na <- subset(daily_dt, !is.na(steps))
+  mean(without_na$steps)
+}
+
+fill_na_minute_mean <- function(dt, f=mean) {
+  intervals <- unique(dt$interval)
+  
+  for(i in intervals) {
+    sset <- subset(dt, interval == i)
+    minute_mean <- mean_without_na(sset)
+    
+    idx <- which(dt$interval == i & is.na(dt$steps))
+    dt[idx,"steps"] <- as.integer(minute_mean)
+  }
+  dt
+}
+
+replaced_na_with_minute_mean <- fill_na_minute_mean(origin)
+
+daily_stemps_replaced <- sqldf('select date, sum(steps) as steps from replaced_na_with_minute_mean group by date')
+
+g <- ggplot(daily_stemps_replaced, aes(steps)) + geom_bar()
+plot(g)
+
+dates <- unique(replaced_na_with_minute_mean$date)
+print("Date, Mean, Median")
+for(d in dates) {
+  sset <- subset(replaced_na_with_minute_mean, replaced_na_with_minute_mean$date == d)
+  mea <- mean(sset$steps)
+  med <- median(sset$steps)
+  print(paste(d,":",mea, ":", med))
+}
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+```{r,echo=FALSE}
+new_origin <- replaced_na_with_minute_mean
+
+new_origin$week <- ifelse(weekdays(as.Date(new_origin$date)) == "토요일" | 
+                            weekdays(as.Date(new_origin$date)) == "일요일"
+                          , "weekend", "weekday")
+
+minutely_stemps_new_origin <- sqldf('select interval, avg(steps) as steps, week from new_origin group by interval, week')
+g <- ggplot(minutely_stemps_new_origin, aes(x=interval, y=steps, colour=week)) + geom_line(type="l")
+plot(g)
+```
+
